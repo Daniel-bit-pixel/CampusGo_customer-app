@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CampusGo — Vendor Menu Manager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0B1A16;
+    --surface: #122720;
+    --surface2: #183129;
+    --surface3: #1E3B31;
+    --spice: #E8622D;
+    --spiceLight: #FF8A54;
+    --palm: #1F8A73;
+    --palmLight: #3DBFA0;
+    --cream: #F6EFE4;
+    --muted: #9FB3AC;
+    --line: #24443A;
+    --danger: #E85D5D;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--cream);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  header {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 28px; background: rgba(11,26,22,0.92); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  header a { color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; }
+  header a:hover { color: var(--cream); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; font-family: 'Bricolage Grotesque', sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1 { font-size: 26px; font-family: 'Bricolage Grotesque', sans-serif; margin: 0 0 6px; }
+  p.sub { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-bottom: 20px; }
+
+  input, select {
+    width: 100%; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface2); color: var(--cream); font-size: 14px; font-family: inherit;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .field { margin-bottom: 14px; }
+  .btn {
+    padding: 12px 22px; border-radius: 10px; font-weight: 700; font-size: 14px;
+    border: none; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: var(--spice); color: #fff; }
+  .btn-primary:hover { background: var(--spiceLight); }
+  .btn-ghost { background: var(--surface2); color: var(--cream); border: 1px solid var(--line); }
+  .btn-danger { background: rgba(232,93,93,0.14); color: #FFC9C9; border: 1px solid var(--danger); }
+  .btn-sm { padding: 7px 12px; font-size: 12px; }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .tab {
+    padding: 9px 16px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer;
+    background: var(--surface2); color: var(--cream); border: 1px solid var(--line);
+  }
+  .tab.active { background: var(--spice); color: #fff; border-color: var(--spice); }
+
+  .item-row {
+    display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px;
+    background: var(--surface2); border: 1px solid var(--line); margin-bottom: 10px;
+  }
+  .item-emoji { font-size: 24px; width: 32px; text-align: center; flex-shrink: 0; }
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-weight: 700; font-size: 14px; }
+  .item-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .item-price { font-weight: 700; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+  .row-actions { display: flex; gap: 6px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-grid .full { grid-column: 1 / -1; }
+
+  .banner { padding: 12px 16px; border-radius: 10px; font-size: 13px; margin-bottom: 20px; }
+  .banner.error { background: rgba(232,93,93,0.12); border: 1px solid var(--danger); color: #FFC9C9; }
+
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 30px 0; }
+
+  .gate { max-width: 420px; margin: 90px auto; text-align: center; }
+  .gate .card { text-align: left; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--surface3); border: 1px solid var(--palm); color: var(--cream);
+    padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 600; z-index: 100;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35); max-width: 88vw; text-align: center; display: none;
+  }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">🍛 CampusGo <span style="color:var(--muted); font-weight:600; font-size:14px;">· Vendor</span></div>
+  <a href="/">← Back to CampusGo</a>
+</header>
+
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CampusGo — Vendor Menu Manager (standalone page)
+
+   Talks to the SAME backend as the main app (server.js). Signs in via
+   POST /api/admin/login using your ADMIN_PASSWORD, then uses the
+   returned token as "Authorization: Bearer <token>" on every write —
+   matching requireAdmin() in server.js exactly.
+
+   Admin tokens are stored in memory on the server (see server.js's
+   own comment on `adminTokens`), so they don't survive a server
+   restart. If a request comes back 401, this page automatically
+   drops back to the login screen so you can sign in again.
+   ============================================================ */
+
+const API_BASE = "http://localhost:5000/api";
+const TOKEN_STORAGE_KEY = "campusgo_vendor_token";
+
+// Each service's table name, display label, and the fixed category
+// options that match schema.sql's ENUM columns for that table.
+const SERVICES = {
+  food:       { table: "menu_items",       label: "Food Delivery", icon: "🍛", categories: ["Rice", "Swallow", "Quick Bites", "Snacks", "Drinks", "Breakfast"] },
+  gas:        { table: "gas_items",        label: "Gas Filling",   icon: "🔥", categories: ["Refill", "Swap", "Accessories"] },
+  laundry:    { table: "laundry_items",    label: "Laundry",       icon: "🧺", categories: ["Wash", "Iron", "Dry Clean"] },
+  stationery: { table: "stationery_items", label: "Stationery",    icon: "📚", categories: ["Books", "Writing", "Paper", "Printing", "Tools"] },
+};
+
+let state = {
+  token: localStorage.getItem(TOKEN_STORAGE_KEY) || "",
+  service: "food",
+  items: [],
+  loading: false,
+  error: "",
+  editingId: null,   // null = "add new" mode; otherwise the item id being edited
+  form: emptyForm(),
+};
+
+function emptyForm() {
+  return { name: "", category: "", price: "", emoji: "", unit: "" };
+}
+
+function buildAuthHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${state.token}`,
+  };
+}
+
+function showToast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.display = "block";
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => { el.style.display = "none"; }, 2600);
+}
+
+async function loadItems() {
+  state.loading = true; state.error = ""; render();
+  try {
+    const svc = SERVICES[state.service];
+    const res = await fetch(`${API_BASE}/${svc.table}`);
+    if (!res.ok) throw new Error("Failed to load items");
+    state.items = await res.json();
+  } catch (err) {
+    state.error = `Couldn't load ${SERVICES[state.service].label.toLowerCase()} items — make sure the CampusGo server is running on http://localhost:5000.`;
+    state.items = [];
+  } finally {
+    state.loading = false; render();
+  }
+}
+
+function handleExpiredSession() {
+  state.token = "";
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  state.error = "Your session expired (likely the server restarted) — please sign in again.";
+  render();
+}
+
+async function submitForm(e) {
+  e.preventDefault();
+  const svc = SERVICES[state.service];
+  const f = state.form;
+  if (!f.name || !f.category || !f.price) {
+    state.error = "Name, category and price are required.";
+    render();
+    return;
+  }
+  const payload = {
+    name: f.name,
+    category: f.category,
+    price: Number(f.price),
+    emoji: f.emoji || null,
+    unit: f.unit || null,
+  };
+  const isEdit = state.editingId !== null;
+  const url = isEdit ? `${API_BASE}/${svc.table}/${state.editingId}` : `${API_BASE}/${svc.table}`;
+  const method = isEdit ? "PUT" : "POST";
+
+  try {
+    const res = await fetch(url, { method, headers: buildAuthHeaders(), body: JSON.stringify(payload) });
+    if (res.status === 401) return handleExpiredSession();
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || `Server responded ${res.status}`);
+    }
+    showToast(isEdit ? "Item updated ✓" : "Item added ✓");
+    state.form = emptyForm();
+    state.editingId = null;
+    state.error = "";
+    await loadItems();
+  } catch (err) {
+    state.error = `Couldn't save this item (${err.message}).`;
+    render();
+  }
+}
+
+function startEdit(item) {
+  state.editingId = item.id;
+  state.form = { name: item.name, category: item.category, price: item.price, emoji: item.emoji || "", unit: item.unit || "" };
+  state.error = "";
+  render();
+  document.getElementById("form-card")?.scrollIntoView({ behavior: "smooth" });
+}
+
+function cancelEdit() {
+  state.editingId = null;
+  state.form = emptyForm();
+  state.error = "";
+  render();
+}
+
+async function deleteItem(item) {
+  if (!confirm(`Remove "${item.name}" from the menu?`)) return;
+  const svc = SERVICES[state.service];
+  try {
+    const res = await fetch(`${API_BASE}/${svc.table}/${item.id}`, { method: "DELETE", headers: buildAuthHeaders() });
+    if (res.status === 401) return handleExpiredSession();
+    if (!res.ok) throw new Error(`Server responded ${res.status}`);
+    showToast("Item removed");
+    await loadItems();
+  } catch (err) {
+    state.error = `Couldn't delete this item (${err.message}).`;
+    render();
+  }
+}
+
+function switchService(key) {
+  state.service = key;
+  state.editingId = null;
+  state.form = emptyForm();
+  state.error = "";
+  loadItems();
+}
+
+function unlockToken() {
+  const input = document.getElementById("password-input");
+  const val = input.value.trim();
+  if (!val) return;
+  loginAsAdmin(val);
+}
+
+async function loginAsAdmin(password) {
+  const btn = document.getElementById("unlock-btn");
+  const errEl = document.getElementById("gate-error");
+  if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
+  if (errEl) errEl.textContent = "";
+  try {
+    const res = await fetch(`${API_BASE}/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "Login failed");
+    state.token = body.token;
+    state.error = "";
+    localStorage.setItem(TOKEN_STORAGE_KEY, body.token);
+    render();
+    loadItems();
+  } catch (err) {
+    if (errEl) errEl.textContent = err.message === "Failed to fetch"
+      ? "Couldn't reach the CampusGo server — make sure it's running on http://localhost:5000."
+      : `${err.message}.`;
+    if (btn) { btn.disabled = false; btn.textContent = "Unlock"; }
+  }
+}
+
+function lockOut() {
+  state.token = "";
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  render();
+}
+
+function naira(n) { return "₦" + Number(n).toLocaleString(); }
+
+/* ---------------- render ---------------- */
+function render() {
+  const app = document.getElementById("app");
+
+  if (!state.token) {
+    app.innerHTML = `
+      <div class="gate">
+        <h1>Vendor access</h1>
+        <p class="sub">Sign in with the CampusGo admin password to manage the menu.</p>
+        <div class="card">
+          <div class="field">
+            <label>Admin password</label>
+            <input id="password-input" type="password" placeholder="Your ADMIN_PASSWORD" />
+          </div>
+          <button id="unlock-btn" class="btn btn-primary" style="width:100%; justify-content:center;" onclick="unlockToken()">Unlock</button>
+          <p id="gate-error" style="color:#FFC9C9; font-size:12px; margin:10px 0 0;">${escapeHtml(state.error)}</p>
+        </div>
+        <p class="sub" style="font-size:12px;">This calls the same POST /api/admin/login your server already uses — sessions expire if the server restarts.</p>
+      </div>
+    `;
+    document.getElementById("password-input").addEventListener("keydown", (e) => { if (e.key === "Enter") unlockToken(); });
+    return;
+  }
+
+  const svc = SERVICES[state.service];
+  const tabsHtml = Object.entries(SERVICES).map(([key, s]) =>
+    `<div class="tab ${key === state.service ? "active" : ""}" onclick="switchService('${key}')">${s.icon} ${s.label}</div>`
+  ).join("");
+
+  const categoryOptions = svc.categories.map((c) =>
+    `<option value="${c}" ${state.form.category === c ? "selected" : ""}>${c}</option>`
+  ).join("");
+
+  const itemsHtml = state.items.length === 0
+    ? `<div class="empty">${state.loading ? "Loading…" : `No ${svc.label.toLowerCase()} items yet — add your first one below.`}</div>`
+    : state.items.map((it) => `
+        <div class="item-row">
+          <div class="item-emoji">${it.emoji || "🛍️"}</div>
+          <div class="item-info">
+            <div class="item-name">${escapeHtml(it.name)}</div>
+            <div class="item-meta">${escapeHtml(it.category)}${it.unit ? " · " + escapeHtml(it.unit) : ""}</div>
+          </div>
+          <div class="item-price">${naira(it.price)}</div>
+          <div class="row-actions">
+            <button class="btn btn-ghost btn-sm" data-action="edit" data-id="${it.id}">Edit</button>
+            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${it.id}">Delete</button>
+          </div>
+        </div>
+      `).join("");
+
+  app.innerHTML = `
+    <div class="wrap">
+      <h1>Vendor Menu Manager</h1>
+      <p class="sub">Add, edit, or remove what's currently available — customers see this live in the CampusGo catalog.</p>
+
+      <div class="tabs">${tabsHtml}</div>
+
+      ${state.error ? `<div class="banner error">${escapeHtml(state.error)}</div>` : ""}
+
+      <div class="card" id="form-card">
+        <h3 style="font-size:16px; margin:0 0 16px;">${state.editingId !== null ? "Edit item" : `Add a new ${svc.label.toLowerCase()} item`}</h3>
+        <form id="item-form" class="form-grid">
+          <div class="field full">
+            <label>Name</label>
+            <input id="f-name" type="text" placeholder="e.g. Jollof Rice & Chicken" value="${escapeAttr(state.form.name)}" required />
+          </div>
+          <div class="field">
+            <label>Category</label>
+            <select id="f-category" required>
+              <option value="" disabled ${!state.form.category ? "selected" : ""}>Select a category</option>
+              ${categoryOptions}
+            </select>
+          </div>
+          <div class="field">
+            <label>Price (₦)</label>
+            <input id="f-price" type="number" min="0" step="1" placeholder="2000" value="${escapeAttr(state.form.price)}" required />
+          </div>
+          <div class="field">
+            <label>Emoji</label>
+            <input id="f-emoji" type="text" maxlength="4" placeholder="🍚" value="${escapeAttr(state.form.emoji)}" />
+          </div>
+          <div class="field">
+            <label>Unit (optional)</label>
+            <input id="f-unit" type="text" placeholder="per plate" value="${escapeAttr(state.form.unit)}" />
+          </div>
+          <div class="full" style="display:flex; gap:10px; margin-top:6px;">
+            <button type="submit" class="btn btn-primary">${state.editingId !== null ? "Save changes" : "Add item"}</button>
+            ${state.editingId !== null ? `<button type="button" class="btn btn-ghost" id="cancel-edit-btn">Cancel</button>` : ""}
+          </div>
+        </form>
+      </div>
+
+      <h3 style="font-size:16px; margin:24px 0 12px;">Current ${svc.label.toLowerCase()} items (${state.items.length})</h3>
+      ${itemsHtml}
+
+      <div style="text-align:center; margin-top:28px;">
+        <button class="btn btn-ghost btn-sm" id="lock-btn">Lock vendor access</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("item-form").addEventListener("submit", (e) => {
+    state.form.name = document.getElementById("f-name").value;
+    state.form.category = document.getElementById("f-category").value;
+    state.form.price = document.getElementById("f-price").value;
+    state.form.emoji = document.getElementById("f-emoji").value;
+    state.form.unit = document.getElementById("f-unit").value;
+    submitForm(e);
+  });
+  document.getElementById("cancel-edit-btn")?.addEventListener("click", cancelEdit);
+  document.getElementById("lock-btn")?.addEventListener("click", lockOut);
+  app.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = state.items.find((it) => String(it.id) === btn.dataset.id);
+      if (item) startEdit(item);
+    });
+  });
+  app.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = state.items.find((it) => String(it.id) === btn.dataset.id);
+      if (item) deleteItem(item);
+    });
+  });
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+render();
+if (state.token) loadItems();
+</script>
+</body>
+</html>
