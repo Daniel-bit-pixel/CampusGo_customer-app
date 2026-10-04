@@ -29,6 +29,11 @@ const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:5000/api";
 const VENDOR_APP_URL = process.env.REACT_APP_VENDOR_APP_URL || "http://localhost:4000";
 const APP_NAME = "CampusGo";
 
+// Flutterwave dashboard → Settings → API Keys. The PUBLIC key is safe
+// to ship in frontend code (that's what it's for) — never put the
+// secret key here, that lives only in the backend's .env.
+const FLUTTERWAVE_PUBLIC_KEY = process.env.REACT_APP_FLUTTERWAVE_PUBLIC_KEY || "FLWPUBK_TEST-your-test-public-key";
+
 // Google Cloud Console → APIs & Services → Credentials → OAuth 2.0
 // Client IDs. Authorized JavaScript origins must include exactly the
 // URL this app runs on (e.g. http://localhost:3000).
@@ -347,6 +352,31 @@ function loadGoogleIdentityScript() {
     document.head.appendChild(script);
   });
   return gisLoadPromise;
+}
+
+/* ---------------- Flutterwave checkout loader ---------------- */
+// Loads Flutterwave's inline checkout script once and resolves when
+// window.FlutterwaveCheckout is ready to use.
+let flwLoadPromise = null;
+function loadFlutterwaveScript() {
+  if (flwLoadPromise) return flwLoadPromise;
+  flwLoadPromise = new Promise((resolve, reject) => {
+    if (window.FlutterwaveCheckout) { resolve(); return; }
+    const existing = document.getElementById("flutterwave-script");
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("Failed to load Flutterwave")));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.flutterwave.com/v3.js";
+    script.id = "flutterwave-script";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Flutterwave"));
+    document.head.appendChild(script);
+  });
+  return flwLoadPromise;
 }
 
 /* ---------------- Auth (Google Sign-In + email/password) ---------------- */
@@ -702,7 +732,7 @@ function Catalog({ service, items, loading, categories, activeCategory, setActiv
 }
 
 /* ---------------- Payment ---------------- */
-function Payment({ service, lines, hostel, payMethod, setPayMethod, deliveryLocation, setDeliveryLocation, placeOrder, goTo }) {
+function Payment({ service, lines, hostel, payMethod, setPayMethod, deliveryLocation, setDeliveryLocation, placeOrder, paying, goTo }) {
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState("");
   const [manualAddress, setManualAddress] = useState("");
@@ -849,7 +879,13 @@ function Payment({ service, lines, hostel, payMethod, setPayMethod, deliveryLoca
                 </div>
               </div>
             </div>
-            <button style={{ ...btnPrimary, width: "100%", justifyContent: "center", padding: "16px 28px", fontSize: 16, marginTop: 18 }} onClick={placeOrder}>Pay {naira(total)}</button>
+            <button
+              style={{ ...btnPrimary, width: "100%", justifyContent: "center", padding: "16px 28px", fontSize: 16, marginTop: 18, opacity: paying ? 0.7 : 1 }}
+              onClick={placeOrder}
+              disabled={paying}
+            >
+              {paying ? "Processing…" : `Pay ${naira(total)}`}
+            </button>
             <button style={{ ...btnGhost, width: "100%", justifyContent: "center", marginTop: 10 }} onClick={() => goTo("hub")}>← Back</button>
           </div>
         </div>
@@ -938,6 +974,7 @@ function App() {
   const [orders, setOrders] = useState([]);
   const [activeOrderId, setActiveOrderId] = useState(null);
   const [payMethod, setPayMethod] = useState("card");
+  const [paying, setPaying] = useState(false);
   const [deliveryLocation, setDeliveryLocation] = useState(null);
   const [toast, setToast] = useState("");
   const timerRef = useRef(null);
@@ -1052,53 +1089,108 @@ function App() {
 
   function goCheckout() { goTo("payment"); }
 
-  // Saves the order to the backend so vendors can see it and get
-  // notified — separate from the local order state below, which
-  // still drives the on-screen tracking demo. If this fails (server
-  // down, etc.) the customer's local experience is unaffected; it
-  // just means no vendor will see this particular order.
-  async function persistOrder(order) {
-    try {
-      const matchedHostel = hostels.find((h) => h.name === order.hostel);
-      await fetch(`${API_BASE}/checkout`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: user?.id,
-          service: order.service,
-          hostel_id: matchedHostel?.id || null,
-          items: buildLines(order.service).map((l) => ({ id: l.id, name: l.name, emoji: l.emoji, price: l.price, qty: l.qty })),
-          subtotal: order.total,
-          delivery_fee: 300,
-          total: order.total,
-          payment_method: payMethod,
-          minutes_left: order.minutesLeft,
-        }),
-      });
-    } catch (err) {
-      console.warn("Couldn't save order to the server — it'll still work locally, but no vendor will see it.", err);
-    }
+  // Creates the real order in the database (this is what makes it
+  // visible to vendors/admin) and returns what the backend saved,
+  // including its real id/order_code/total. Throws on failure —
+  // callers decide how strict to be about that.
+  async function checkoutOrder(order) {
+    const matchedHostel = hostels.find((h) => h.name === order.hostel);
+    const res = await fetch(`${API_BASE}/checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: user?.id,
+        service: order.service,
+        hostel_id: matchedHostel?.id || null,
+        items: buildLines(order.service).map((l) => ({ id: l.id, name: l.name, emoji: l.emoji, price: l.price, qty: l.qty })),
+        subtotal: order.total,
+        delivery_fee: 300,
+        total: order.total,
+        payment_method: payMethod,
+        minutes_left: order.minutesLeft,
+      }),
+    });
+    if (!res.ok) throw new Error("Checkout failed");
+    return res.json();
+  }
+
+  // Puts the order into local state and takes the customer to the
+  // tracking screen — this is what used to be the tail end of
+  // placeOrder(), now shared by both the card and cash/transfer paths
+  // so tracking behaves identically regardless of how payment happened.
+  function finalizeLocalOrder(order, displayId) {
+    setOrders((prev) => [...prev, { ...order, id: displayId }]);
+    setActiveOrderId(displayId);
+    setCarts((prev) => ({ ...prev, [currentService]: {} }));
+    setDeliveryLocation(null);
+    goTo("tracking");
+  }
+
+  function buildOrderDraft() {
+    const lines = buildLines(currentService);
+    const total = lines.reduce((sum, l) => sum + l.price * l.qty, 0);
+    const items = lines.map((l) => ({ name: l.name, qty: l.qty, em: l.emoji }));
+    const distanceKm = distanceForOrder(deliveryLocation, hostel);
+    const minutesLeft = estimateMinutes(distanceKm, currentService);
+    return { service: currentService, items, total, hostel, deliveryLocation, distanceKm, status: "Order placed", progress: 0.08, minutesLeft, stepIndex: 0 };
   }
 
   // NOTE: the on-screen tracking below (status/progress/stepIndex)
   // still runs locally via the simulated ticker further down — it
-  // doesn't reflect real vendor/rider actions yet. persistOrder()
-  // above is what makes the order actually visible to vendors.
-  function placeOrder() {
-    const lines = buildLines(currentService);
-    const total = lines.reduce((sum, l) => sum + l.price * l.qty, 0);
-    const items = lines.map((l) => ({ name: l.name, qty: l.qty, em: l.emoji }));
-    const id = "CG-" + Math.floor(1000 + Math.random() * 9000);
-    const distanceKm = distanceForOrder(deliveryLocation, hostel);
-    const minutesLeft = estimateMinutes(distanceKm, currentService);
-    const order = { id, service: currentService, items, total, hostel, deliveryLocation, distanceKm, status: "Order placed", progress: 0.08, minutesLeft, stepIndex: 0 };
-    setOrders((prev) => [...prev, order]);
-    setActiveOrderId(id);
-    persistOrder(order);
-    setCarts((prev) => ({ ...prev, [currentService]: {} }));
-    setDeliveryLocation(null);
+  // doesn't reflect real vendor/rider actions yet.
+  async function placeOrder() {
+    const order = buildOrderDraft();
+
+    if (payMethod === "card") {
+      setPaying(true);
+      try {
+        const saved = await checkoutOrder(order); // real DB order, payment_status still "pending"
+        await loadFlutterwaveScript();
+        window.FlutterwaveCheckout({
+          public_key: FLUTTERWAVE_PUBLIC_KEY,
+          tx_ref: saved.order_code,
+          amount: saved.total,
+          currency: "NGN",
+          payment_options: "card,banktransfer,ussd",
+          customer: { email: user?.email, name: user?.full_name },
+          customizations: { title: APP_NAME, description: `Order ${saved.order_code}` },
+          callback: async (response) => {
+            try {
+              const verifyRes = await fetch(`${API_BASE}/payments/verify`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ order_id: saved.id, transaction_id: response.transaction_id }),
+              });
+              const verifyData = await verifyRes.json();
+              if (!verifyRes.ok || !verifyData.verified) {
+                showToast("Payment couldn't be verified — please contact support with your reference.");
+                return;
+              }
+              showToast("Payment successful — order placed! 🎉");
+              finalizeLocalOrder(order, saved.order_code);
+            } finally {
+              setPaying(false);
+            }
+          },
+          onclose: () => {
+            setPaying(false);
+            showToast("Payment cancelled");
+          },
+        });
+      } catch (err) {
+        setPaying(false);
+        showToast("Couldn't start checkout — try again.");
+      }
+      return;
+    }
+
+    // Cash / bank transfer — trusted at order time, same as before.
+    const displayId = "CG-" + Math.floor(1000 + Math.random() * 9000);
+    checkoutOrder(order).catch((err) => {
+      console.warn("Couldn't save order to the server — it'll still work locally, but no vendor will see it.", err);
+    });
     showToast("Payment successful — order placed! 🎉");
-    goTo("tracking");
+    finalizeLocalOrder(order, displayId);
   }
 
   // Simulated order progress ticker
@@ -1154,7 +1246,7 @@ function App() {
     page = (
       <>
         <Nav active="catalog" user={user} cartCount={totalCartCount} activeOrderId={activeOrderId} goTo={goTo} logout={logout} showToast={showToast} />
-        <Payment service={svcObj} lines={buildLines(currentService)} hostel={hostel} payMethod={payMethod} setPayMethod={setPayMethod} deliveryLocation={deliveryLocation} setDeliveryLocation={setDeliveryLocation} placeOrder={placeOrder} goTo={goTo} />
+        <Payment service={svcObj} lines={buildLines(currentService)} hostel={hostel} payMethod={payMethod} setPayMethod={setPayMethod} deliveryLocation={deliveryLocation} setDeliveryLocation={setDeliveryLocation} placeOrder={placeOrder} paying={paying} goTo={goTo} />
       </>
     );
   } else if (view === "tracking") {
