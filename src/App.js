@@ -617,6 +617,23 @@ function Hub({ user, hostel, setHostel, hostels, carts, itemsByService, orders, 
   );
 }
 
+/* ---------------- ItemPhoto ---------------- */
+// Shows an item's real photo when it has one (uploaded by the vendor),
+// and quietly falls back to the emoji if there's no photo or it fails
+// to load, so a broken link never leaves an empty box.
+function ItemPhoto({ item, size, radius, emojiSize }) {
+  const [failed, setFailed] = useState(false);
+  const box = { width: size?.w ?? "100%", height: size?.h ?? 110, borderRadius: radius ?? 12, background: COLORS.surface2, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontSize: emojiSize ?? 44, flexShrink: 0 };
+  if (item.image_url && !failed) {
+    return (
+      <div style={box}>
+        <img src={item.image_url} alt={item.name} loading="lazy" onError={() => setFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      </div>
+    );
+  }
+  return <div style={box}>{item.emoji || "🛍️"}</div>;
+}
+
 /* ---------------- Generic Catalog (used by all 4 services) ---------------- */
 function Catalog({ service, items, loading, categories, activeCategory, setActiveCategory, searchQuery, setSearchQuery, cart, changeQty, goCheckout, goTo }) {
   const q = searchQuery.trim().toLowerCase();
@@ -672,7 +689,7 @@ function Catalog({ service, items, loading, categories, activeCategory, setActiv
               const qty = cart[it.id] || 0;
               return (
                 <div key={it.id} style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}`, borderRadius: 16, padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <div style={{ width: "100%", height: 110, borderRadius: 12, background: COLORS.surface2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 44 }}>{it.emoji || "🛍️"}</div>
+                  <ItemPhoto item={it} size={{ w: "100%", h: 140 }} radius={12} emojiSize={44} />
                   {it.category && <div style={{ fontSize: 11, color: COLORS.palmLight, textTransform: "uppercase", letterSpacing: ".06em", fontFamily: "JetBrains Mono, monospace" }}>{it.category}</div>}
                   <h4 style={{ fontSize: 16, margin: 0 }}>{it.name}</h4>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto" }}>
@@ -708,7 +725,7 @@ function Catalog({ service, items, loading, categories, activeCategory, setActiv
                   if (!item) return null;
                   return (
                     <div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${COLORS.line}` }}>
-                      <div style={{ fontSize: 22, width: 36, height: 36, background: COLORS.surface2, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{item.emoji || "🛍️"}</div>
+                      <ItemPhoto item={item} size={{ w: 36, h: 36 }} radius={8} emojiSize={22} />
                       <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{item.name}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <div onClick={() => changeQty(item.id, -1)} style={{ width: 22, height: 22, borderRadius: 6, background: COLORS.surface2, color: COLORS.cream, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, cursor: "pointer" }}>−</div>

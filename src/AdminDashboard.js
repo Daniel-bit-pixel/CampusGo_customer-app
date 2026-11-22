@@ -144,6 +144,32 @@ const TABLES = [
       { name: "qty", type: "number", step: "0.01", default: 1 },
     ],
   },
+  {
+    key: "vendor_bank_accounts",
+    label: "Vendor Payout Accounts",
+    endpoint: "vendor_bank_accounts",
+    fields: [
+      { name: "vendor_name", type: "text", required: true, helper: "Must match the business name used in the vendor app exactly" },
+      { name: "bank_code", type: "text", required: true },
+      { name: "bank_name", type: "text", required: true },
+      { name: "account_number", type: "text", required: true },
+      { name: "account_name", type: "text", required: true, helper: "Normally filled in automatically by Flutterwave's account verification" },
+    ],
+  },
+  {
+    key: "vendor_earnings",
+    label: "Vendor Earnings & Payouts",
+    endpoint: "vendor_earnings",
+    fields: [
+      { name: "order_id", type: "number", required: true },
+      { name: "vendor_name", type: "text", required: true },
+      { name: "gross_amount", type: "number", required: true },
+      { name: "commission_amount", type: "number", required: true },
+      { name: "net_amount", type: "number", required: true, helper: "What the vendor is actually owed (gross minus commission)" },
+      { name: "payout_status", type: "select", required: true, options: ["pending", "paid"], helper: "Set to 'paid' once you've sent this vendor their money, by any method" },
+      { name: "paid_at", type: "text", helper: "e.g. 2026-08-27 14:30:00 — leave blank until paid" },
+    ],
+  },
 ];
 
 /* ---------------- API helper ---------------- */
